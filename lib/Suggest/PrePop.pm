@@ -2,11 +2,12 @@ package Suggest::PrePop;
 
 use strict;
 use warnings;
-our $VERSION = '1.0.1';
+our $VERSION = '1.1.0';
 
 use Moose;
 
 use Cache::RedisDB;
+use List::Util qw(uniq);
 
 has cache_namespace => (
     is      => 'ro',
@@ -16,7 +17,21 @@ has cache_namespace => (
 
 my $key_sep = '<>';
 
-has _lex_key => (
+has 'scopes' => (
+    is      => 'ro',
+    isa     => 'ArrayRef',
+    lazy    => 1,
+    default => sub {
+        my $self = shift;
+        my $size = length($self->_cnt_key_base . $key_sep);
+        no warnings('substr');
+        return [sort { $a cmp $b }
+              map { substr($_, $size) // '' }
+              @{$self->_redis->keys($self->_cnt_key_base . '*')}];
+    },
+);
+
+has _lex_key_base => (
     is      => 'ro',
     isa     => 'Str',
     lazy    => 1,
@@ -26,7 +41,7 @@ has _lex_key => (
     },
 );
 
-has _cnt_key => (
+has _cnt_key_base => (
     is      => 'ro',
     isa     => 'Str',
     lazy    => 1,
@@ -57,61 +72,94 @@ has top_count => (
 # Convenience
 sub _redis { Cache::RedisDB->redis }
 
+sub _lex_key {
+    my ($self, $scope) = @_;
+
+    return ($scope)
+      ? join($key_sep, $self->_lex_key_base, uc $scope)
+      : $self->_lex_key_base;
+}
+
+sub _cnt_key {
+    my ($self, $scope) = @_;
+
+    return ($scope)
+      ? join($key_sep, $self->_cnt_key_base, uc $scope)
+      : $self->_cnt_key_base;
+}
+
 sub add {
-    my ($self, $item, $count) = @_;
+    my ($self, $item, $count, @scopes) = @_;
 
     $count //= 1;    # Most of the time we'll just get a single entry
+    @scopes = ('') unless @scopes;
 
     # For now, we just assume supplied items are well-formed
     my $redis = $self->_redis;
 
-    # Lexically sorted items are all zero-scored
-    $redis->zadd($self->_lex_key, 0, $item);
+    my $how_many = 0;
+    foreach my $scope (@scopes) {
+        # Lexically sorted items are all zero-scored
+        $redis->zadd($self->_lex_key($scope), 0, $item);
 
-    # Score sorted items get incremented.
-    return $redis->zincrby($self->_cnt_key, $count, $item);
+        # Score sorted items get incremented.
+        $how_many += $redis->zincrby($self->_cnt_key($scope), $count, $item);
+    }
+
+    return $how_many;
 }
 
 sub ask {
-    my ($self, $prefix, $count) = @_;
+    my ($self, $prefix, $count, @scopes) = @_;
 
     $count //= $self->top_count;  # If they don't say we try to find the 5 best.
+    @scopes = ('') unless @scopes;
 
     my $redis = $self->_redis;
 
-    my @full =
-      map  { $_->[0] }
-      sort { $b->[1] <=> $a->[1] }
-      grep { $_->[1] >= $self->min_activity }
-      map  { [$_, $redis->zscore($self->_cnt_key, $_)] } @{
-        $redis->zrangebylex(
-            $self->_lex_key,
-            '[' . $prefix,
-            '[' . $prefix . "\xff"
-          ) // []};
+    my @full;
 
-    return [scalar(@full <= $count) ? @full : @full[0 .. $count - 1]];
+    foreach my $scope (@scopes) {
+        push @full, grep { $_->[1] >= $self->min_activity }
+          map { [$_, $redis->zscore($self->_cnt_key($scope), $_)] } @{
+            $redis->zrangebylex(
+                $self->_lex_key($scope),
+                '[' . $prefix,
+                '[' . $prefix . "\xff"
+              ) // []};
+    }
+
+    @full = uniq map { $_->[0] } sort { $b->[1] <=> $a->[1] } @full;
+
+    return [splice(@full, 0, $count)];
 }
 
 sub prune {
-    my ($self, $keep) = @_;
+    my ($self, $keep, @scopes) = @_;
 
     $keep //= $self->entries_limit;
+    @scopes = ('') unless @scopes;
 
     my $redis = $self->_redis;
 
-    # Count key is the one from which results are collated, so even
-    # if things are out of sync, this is the one about which we care.
-    return 0 if ($redis->zcard($self->_cnt_key) <= $keep);
+    my $count = 0;
 
-    my $final_index = -1 * $keep - 1;    # Range below is inclusive.
-    my @to_prune = @{$redis->zrange($self->_cnt_key, 0, $final_index)};
-    my $count    = scalar @to_prune;
+    foreach my $scope (@scopes) {
+        # Count key is the one from which results are collated, so even
+        # if things are out of sync, this is the one about which we care.
+        next if ($redis->zcard($self->_cnt_key($scope)) <= $keep);
 
-    # We're going to do this the slow way to keep them in sync.
-    foreach my $item (@to_prune) {
-        $redis->zrem($self->_cnt_key, $item);
-        $redis->zrem($self->_lex_key, $item);
+        my $final_index = -1 * $keep - 1;    # Range below is inclusive.
+        my @to_prune =
+          @{$redis->zrange($self->_cnt_key($scope), 0, $final_index)};
+        $count += scalar @to_prune;
+
+        # We're going to do this the slow way to keep them in sync.
+        foreach my $item (@to_prune) {
+            $redis->zrem($self->_cnt_key($scope), $item);
+            $redis->zrem($self->_lex_key($scope), $item);
+        }
+
     }
 
     return $count;
@@ -156,17 +204,21 @@ Constructor.  The following attributes (with defaults) may be set:
 
 - C<top_count> (5) - The default number of entries to return from 'ask'
 
-=item add($item, [$count])
+=item scopes
 
-Add C<$item> to the index, or increment its current popularity. Any C<$count> is taken as the number of times it was seen; defaults to 1.
+Return an array reference with all currently known scopes.  Lazily computed on first call.
 
-=item ask($prefix, [$count])
+=item add($item, [$count], [@scopes])
 
-Suggest the C<$count> most popular items matching the supplied C<$prefix>.  Defaults to 5.
+Add C<$item> to the scope indices, or increment its current popularity. Any C<$count> is taken as the number of times it was seen; defaults to 1. 
 
-=item prune([$count])
+=item ask($prefix, [$count], [@scopes])
 
-Prune all but the C<$count> most popular items.  Defaults to the instance C<entries_limit>.
+Suggest the C<$count> most popular items n the given scopes matching the supplied C<$prefix>.  Defaults to 5.
+
+=item prune([$count], [@scopes])
+
+Prune all but the C<$count> most popular items from the given scopes.  Defaults to the instance C<entries_limit>.
 
 =back
 

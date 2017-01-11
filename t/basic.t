@@ -42,24 +42,29 @@ subtest 'full' => sub {
         ['sherlock holmes',          6],
         ['sherlock',                 5],
         ['surelock',                 1],
-        ['doctor watson',            10],
-        ['dr. waston',               6],
-        ['dr watson',                6],
         ['watson',                   4],
         ['moriarty',                 15],
         ['prof moriarty',            8],
         ['prof. moriarty',           9],
         ['professor moriarty',       8],
         ['professor james moriarty', 6],
+        ['doctor watson', 10, 'doctors'],
+        ['dr. watson',    6,  'doctors'],
+        ['dr watson',     6,  'doctors'],
+        ['the doctor',    10, 'doctors', 'who'],
     );
     # Limit is only applied on prune.
-    my $suggestor = new_ok('Suggest::PrePop' => [entries_limit => 10]);
+    my $suggestor = new_ok('Suggest::PrePop' => [entries_limit => 7]);
 
     foreach my $item (@test_data) {
         ok $suggestor->add(@$item),
           'Add "' . $item->[0] . '" ' . $item->[1] . ' times';
     }
-
+    eq_or_diff(
+        $suggestor->scopes,
+        ['', 'DOCTORS', 'WHO'],
+        'Empty, DOCTORS and WHO scopes'
+    );
     eq_or_diff(
         $suggestor->ask('m'),
         ['moriarty', 'mycroft', 'mycroft holmes'],
@@ -70,10 +75,17 @@ subtest 'full' => sub {
         ['mycroft', 'mycroft holmes'],
         'Double letter prefix matches'
     );
+    eq_or_diff($suggestor->ask('dr'), [],
+        'Doctors live in their own search space');
     eq_or_diff(
-        $suggestor->ask('dr'),
-        ['dr watson', 'dr. waston'],
-        'Lex order on same score matches'
+        $suggestor->ask('dr', 5, 'doctors'),
+        ['dr watson', 'dr. watson'],
+        '...where we can find them.'
+    );
+    eq_or_diff(
+        $suggestor->ask('t', 5, 'doctors'),
+        $suggestor->ask('t', 5, 'doctors', 'who'),
+        'Do not get cross-namespace dupes'
     );
     eq_or_diff(
         $suggestor->ask('prof'),
@@ -99,7 +111,10 @@ subtest 'full' => sub {
     eq_or_diff($suggestor->ask('sher'),
         ['sherlock holmes'], 'Leaving only one sherlock entry');
 
-    cmp_ok $suggestor->prune(0), '==', 10, 'Can completely empty';
+    cmp_ok $suggestor->prune(0), '==', 7,
+      'Can completely empty default namespace';
+    cmp_ok $suggestor->prune(0, 'doctors', 'who', 'junk'), '==', 5,
+      'Can completely empty "doctors" and "who" namespaces even with junk';
 
 };
 
