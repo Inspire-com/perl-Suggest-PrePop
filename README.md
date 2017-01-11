@@ -29,17 +29,21 @@ used for suggestions of partially typed items (e.g. web search forms.)
 
     \- `top_count` (5) - The default number of entries to return from 'ask'
 
-- add($item, \[$count\])
+- scopes
 
-    Add `$item` to the index, or increment its current popularity. Any `$count` is taken as the number of times it was seen; defaults to 1.
+    Return an array reference with all currently known scopes.  Lazily computed on first call.
 
-- ask($prefix, \[$count\])
+- add($item, \[$count\], \[@scopes\])
 
-    Suggest the `$count` most popular items matching the supplied `$prefix`.  Defaults to 5.
+    Add `$item` to the scope indices, or increment its current popularity. Any `$count` is taken as the number of times it was seen; defaults to 1. 
 
-- prune(\[$count\])
+- ask($prefix, \[$count\], \[@scopes\])
 
-    Prune all but the `$count` most popular items.  Defaults to the instance `entries_limit`.
+    Suggest the `$count` most popular items n the given scopes matching the supplied `$prefix`.  Defaults to 5.
+
+- prune(\[$count\], \[@scopes\])
+
+    Prune all but the `$count` most popular items from the given scopes.  Defaults to the instance `entries_limit`.
 
 # AUTHOR
 Inspire
