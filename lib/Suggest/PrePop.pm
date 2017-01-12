@@ -7,7 +7,6 @@ our $VERSION = '1.1.0';
 use Moose;
 
 use Cache::RedisDB;
-use List::Util qw(uniq);
 
 has cache_namespace => (
     is      => 'ro',
@@ -15,7 +14,7 @@ has cache_namespace => (
     default => 'SUGGEST-PREPOP',
 );
 
-my $key_sep = '<>';
+my $key_sep = chr(0x02);    # Start-of-text
 
 has 'scopes' => (
     is      => 'ro',
@@ -25,7 +24,8 @@ has 'scopes' => (
         my $self = shift;
         my $size = length($self->_cnt_key_base . $key_sep);
         no warnings('substr');
-        return [sort { $a cmp $b }
+        return [
+            sort { $a cmp $b }
               map { substr($_, $size) // '' }
               @{$self->_redis->keys($self->_cnt_key_base . '*')}];
     },
@@ -76,7 +76,7 @@ sub _lex_key {
     my ($self, $scope) = @_;
 
     return ($scope)
-      ? join($key_sep, $self->_lex_key_base, uc $scope)
+      ? join($key_sep, $self->_lex_key_base, lc $scope)
       : $self->_lex_key_base;
 }
 
@@ -84,7 +84,7 @@ sub _cnt_key {
     my ($self, $scope) = @_;
 
     return ($scope)
-      ? join($key_sep, $self->_cnt_key_base, uc $scope)
+      ? join($key_sep, $self->_cnt_key_base, lc $scope)
       : $self->_cnt_key_base;
 }
 
@@ -97,13 +97,14 @@ sub add {
     # For now, we just assume supplied items are well-formed
     my $redis = $self->_redis;
 
+    my $keyed_item = join($key_sep, lc $item, $item);
+
     my $how_many = 0;
     foreach my $scope (@scopes) {
         # Lexically sorted items are all zero-scored
-        $redis->zadd($self->_lex_key($scope), 0, $item);
-
+        $redis->zadd($self->_lex_key($scope), 0, $keyed_item);
         # Score sorted items get incremented.
-        $how_many += $redis->zincrby($self->_cnt_key($scope), $count, $item);
+        $how_many += $redis->zincrby($self->_cnt_key($scope), $count, $keyed_item);
     }
 
     return $how_many;
@@ -128,10 +129,17 @@ sub ask {
                 '[' . $prefix . "\xff"
               ) // []};
     }
+    my %seen;
 
-    @full = uniq map { $_->[0] } sort { $b->[1] <=> $a->[1] } @full;
+    my @final;
+    foreach my $thing (sort { $b->[1] <=> $a->[1] } @full) {
+        my ($lc, $pc) = split $key_sep, $thing->[0];
+        next if defined $seen{$lc};
+        $seen{$lc} = 1;
+        push @final, $pc;
+    }
 
-    return [splice(@full, 0, $count)];
+    return [splice(@final, 0, $count)];
 }
 
 sub prune {
@@ -207,10 +215,11 @@ Constructor.  The following attributes (with defaults) may be set:
 =item scopes
 
 Return an array reference with all currently known scopes.  Lazily computed on first call.
+Scopes are B<case-insensitive>.
 
 =item add($item, [$count], [@scopes])
 
-Add C<$item> to the scope indices, or increment its current popularity. Any C<$count> is taken as the number of times it was seen; defaults to 1. 
+Add C<$item> to the scope indices, or increment its current popularity. Any C<$count> is taken as the number of times it was seen; defaults to 1.  ASCII character 0x02 (STX) is reserved for internal use.
 
 =item ask($prefix, [$count], [@scopes])
 

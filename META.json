@@ -62,7 +62,8 @@
    },
    "version" : "1.1.0",
    "x_contributors" : [
-      "Matt Miller <matt@inspire.com>"
+      "Matt Miller <matt@inspire.com>",
+      "nebulous <nebulous@crashed.net>"
    ],
    "x_serialization_backend" : "JSON::XS version 3.03"
 }
