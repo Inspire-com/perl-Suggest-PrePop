@@ -7,7 +7,6 @@ our $VERSION = '1.1.0';
 use Moose;
 
 use Cache::RedisDB;
-use List::Util qw(uniq);
 
 has cache_namespace => (
     is      => 'ro',
@@ -98,12 +97,14 @@ sub add {
     # For now, we just assume supplied items are well-formed
     my $redis = $self->_redis;
 
+    my $keyed_item = join($key_sep, lc $item, $item);
+
     my $how_many = 0;
     foreach my $scope (@scopes) {
         # Lexically sorted items are all zero-scored
-        $redis->zadd($self->_lex_key($scope), 0, $item);
+        $redis->zadd($self->_lex_key($scope), 0, $keyed_item);
         # Score sorted items get incremented.
-        $how_many += $redis->zincrby($self->_cnt_key($scope), $count, $item);
+        $how_many += $redis->zincrby($self->_cnt_key($scope), $count, $keyed_item);
     }
 
     return $how_many;
@@ -128,10 +129,17 @@ sub ask {
                 '[' . $prefix . "\xff"
               ) // []};
     }
+    my %seen;
 
-    @full = uniq map { $_->[0] } sort { $b->[1] <=> $a->[1] } @full;
+    my @final;
+    foreach my $thing (sort { $b->[1] <=> $a->[1] } @full) {
+        my ($lc, $pc) = split $key_sep, $thing->[0];
+        next if defined $seen{$lc};
+        $seen{$lc} = 1;
+        push @final, $pc;
+    }
 
-    return [splice(@full, 0, $count)];
+    return [splice(@final, 0, $count)];
 }
 
 sub prune {

@@ -58,7 +58,8 @@ subtest 'full' => sub {
         ['doctor watson', 10, 'doctors'],
         ['dr. watson',    6,  'doctors'],
         ['dr watson',     6,  'doctors'],
-        ['the doctor', 10, 'doctors', 'who'],
+        ['The Doctor', 8, 'doctors', 'who'],
+        ['the doctor', 6, 'doctors', 'who'],
     );
     # Limit is only applied on prune.
     my $suggestor = new_ok('Suggest::PrePop' => [entries_limit => 7]);
@@ -89,9 +90,11 @@ subtest 'full' => sub {
         ['dr watson', 'dr. watson'],
         '...where we can find them.'
     );
+    eq_or_diff($suggestor->ask('the', 5, 'who'),
+        ['The Doctor'], 'Results combine and produce the most popular result');
     eq_or_diff(
-        $suggestor->ask('t', 5, 'doctors'),
         $suggestor->ask('t', 5, 'doctors', 'who'),
+        $suggestor->ask('t', 5, 'doctors'),
         'Do not get cross-namespace dupes'
     );
     eq_or_diff(
