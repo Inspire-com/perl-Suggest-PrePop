@@ -15,7 +15,7 @@ has cache_namespace => (
     default => 'SUGGEST-PREPOP',
 );
 
-my $key_sep = '<>';
+my $key_sep = chr(0x02);    # Start-of-text
 
 has 'scopes' => (
     is      => 'ro',
@@ -25,7 +25,8 @@ has 'scopes' => (
         my $self = shift;
         my $size = length($self->_cnt_key_base . $key_sep);
         no warnings('substr');
-        return [sort { $a cmp $b }
+        return [
+            sort { $a cmp $b }
               map { substr($_, $size) // '' }
               @{$self->_redis->keys($self->_cnt_key_base . '*')}];
     },
@@ -76,7 +77,7 @@ sub _lex_key {
     my ($self, $scope) = @_;
 
     return ($scope)
-      ? join($key_sep, $self->_lex_key_base, uc $scope)
+      ? join($key_sep, $self->_lex_key_base, lc $scope)
       : $self->_lex_key_base;
 }
 
@@ -84,7 +85,7 @@ sub _cnt_key {
     my ($self, $scope) = @_;
 
     return ($scope)
-      ? join($key_sep, $self->_cnt_key_base, uc $scope)
+      ? join($key_sep, $self->_cnt_key_base, lc $scope)
       : $self->_cnt_key_base;
 }
 
@@ -101,7 +102,6 @@ sub add {
     foreach my $scope (@scopes) {
         # Lexically sorted items are all zero-scored
         $redis->zadd($self->_lex_key($scope), 0, $item);
-
         # Score sorted items get incremented.
         $how_many += $redis->zincrby($self->_cnt_key($scope), $count, $item);
     }
@@ -207,10 +207,11 @@ Constructor.  The following attributes (with defaults) may be set:
 =item scopes
 
 Return an array reference with all currently known scopes.  Lazily computed on first call.
+Scopes are B<case-insensitive>.
 
 =item add($item, [$count], [@scopes])
 
-Add C<$item> to the scope indices, or increment its current popularity. Any C<$count> is taken as the number of times it was seen; defaults to 1. 
+Add C<$item> to the scope indices, or increment its current popularity. Any C<$count> is taken as the number of times it was seen; defaults to 1.  ASCII character 0x02 (STX) is reserved for internal use.
 
 =item ask($prefix, [$count], [@scopes])
 

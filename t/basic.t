@@ -5,10 +5,17 @@ use Test::FailWarnings;
 use Test::Most;
 use Test::RedisDB;
 
+use version;
+
 use Suggest::PrePop;
 
 my $server = Test::RedisDB->new;
+my $redis  = $server->redisdb_client;
 plan(skip_all => 'Could not start test redis-server') unless $server;
+my $rangebylexmin = version->parse('2.8.9');
+plan(skip_all => 'Minimum Redis version not met. Required: '
+      . $rangebylexmin->normal)
+  unless version->parse($redis->version) >= $rangebylexmin;
 
 my $former_val = $ENV{'REDIS_CACHE_SERVER'};
 $ENV{'REDIS_CACHE_SERVER'} = $server->host . ':' . $server->port;
@@ -51,7 +58,7 @@ subtest 'full' => sub {
         ['doctor watson', 10, 'doctors'],
         ['dr. watson',    6,  'doctors'],
         ['dr watson',     6,  'doctors'],
-        ['the doctor',    10, 'doctors', 'who'],
+        ['the doctor', 10, 'doctors', 'who'],
     );
     # Limit is only applied on prune.
     my $suggestor = new_ok('Suggest::PrePop' => [entries_limit => 7]);
@@ -62,8 +69,8 @@ subtest 'full' => sub {
     }
     eq_or_diff(
         $suggestor->scopes,
-        ['', 'DOCTORS', 'WHO'],
-        'Empty, DOCTORS and WHO scopes'
+        ['', 'doctors', 'who'],
+        'Empty, doctors and who scopes'
     );
     eq_or_diff(
         $suggestor->ask('m'),

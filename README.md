@@ -32,10 +32,11 @@ used for suggestions of partially typed items (e.g. web search forms.)
 - scopes
 
     Return an array reference with all currently known scopes.  Lazily computed on first call.
+    Scopes are **case-insensitive**.
 
 - add($item, \[$count\], \[@scopes\])
 
-    Add `$item` to the scope indices, or increment its current popularity. Any `$count` is taken as the number of times it was seen; defaults to 1. 
+    Add `$item` to the scope indices, or increment its current popularity. Any `$count` is taken as the number of times it was seen; defaults to 1.  ASCII character 0x02 (STX) is reserved for internal use.
 
 - ask($prefix, \[$count\], \[@scopes\])
 
