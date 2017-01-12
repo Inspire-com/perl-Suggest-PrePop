@@ -123,7 +123,7 @@ subtest 'full' => sub {
 
     cmp_ok $suggestor->prune(0), '==', 7,
       'Can completely empty default namespace';
-    cmp_ok $suggestor->prune(0, 'doctors', 'who', 'junk'), '==', 5,
+    cmp_ok $suggestor->prune(0, 'doctors', 'who', 'junk'), '==', 7,
       'Can completely empty "doctors" and "who" namespaces even with junk';
 
 };
