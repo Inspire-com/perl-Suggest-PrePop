@@ -10,8 +10,8 @@ use version;
 use Suggest::PrePop;
 
 my $server = Test::RedisDB->new;
-my $redis  = $server->redisdb_client;
 plan(skip_all => 'Could not start test redis-server') unless $server;
+my $redis         = $server->redisdb_client;
 my $rangebylexmin = version->parse('2.8.9');
 plan(skip_all => 'Minimum Redis version not met. Required: '
       . $rangebylexmin->normal)
