@@ -38,6 +38,10 @@ used for suggestions of partially typed items (e.g. web search forms.)
 
     Add `$item` to the scope indices, or increment its current popularity. Any `$count` is taken as the number of times it was seen; defaults to 1.  ASCII character 0x02 (STX) is reserved for internal use.
 
+- drop\_prefix($prefix, \[@scopes\])
+
+    Drop all of the items which match the supplied prefiex from the index.
+
 - ask($prefix, \[$count\], \[@scopes\])
 
     Suggest the `$count` most popular items n the given scopes matching the supplied `$prefix`.  Defaults to 5.

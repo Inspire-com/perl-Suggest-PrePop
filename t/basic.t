@@ -37,8 +37,7 @@ subtest 'simple' => sub {
     eq_or_diff $suggestor->ask("my", 10), ['my fun search'],
       'A single entry in the suggestions now';
     cmp_ok $suggestor->prune, '==', 0, 'Not enough entries to prune anything.';
-    cmp_ok $suggestor->prune(0), '==', 1,
-      'Removing all entries removes the one we added';
+    cmp_ok $suggestor->drop_prefix('my fun'), '==', 1, 'Can drop our item by prefix';
 };
 
 subtest 'full' => sub {

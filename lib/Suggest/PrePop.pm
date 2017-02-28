@@ -110,6 +110,34 @@ sub add {
     return $how_many;
 }
 
+sub drop_prefix {
+    my ($self, $prefix, @scopes) = @_;
+
+    return 0 unless $prefix;
+    @scopes = ('') unless @scopes;
+
+    my $redis    = $self->_redis;
+    my $how_many = 0;
+    foreach my $scope (@scopes) {
+        my $lex_key = $self->_lex_key($scope);
+        my $cnt_key = $self->_cnt_key($scope);
+        foreach my $member (
+            @{
+                $redis->zrangebylex(
+                    $lex_key,
+                    '[' . $prefix,
+                    '[' . $prefix . "\xff"
+                  ) // []})
+        {
+            $redis->zrem($lex_key, $member);
+            $redis->zrem($cnt_key, $member);
+            $how_many++;
+        }
+    }
+
+    return $how_many;
+}
+
 sub ask {
     my ($self, $prefix, $count, @scopes) = @_;
 
@@ -220,6 +248,10 @@ Scopes are B<case-insensitive>.
 =item add($item, [$count], [@scopes])
 
 Add C<$item> to the scope indices, or increment its current popularity. Any C<$count> is taken as the number of times it was seen; defaults to 1.  ASCII character 0x02 (STX) is reserved for internal use.
+
+=item drop_prefix($prefix, [@scopes])
+
+Drop all of the items which match the supplied prefiex from the index.
 
 =item ask($prefix, [$count], [@scopes])
 
