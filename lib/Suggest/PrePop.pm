@@ -2,7 +2,7 @@ package Suggest::PrePop;
 
 use strict;
 use warnings;
-our $VERSION = '2.1.0';
+our $VERSION = '2.1.1';
 
 use Moose;
 
