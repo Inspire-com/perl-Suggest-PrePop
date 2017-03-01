@@ -26,8 +26,8 @@ subtest 'defaults' => sub {
     cmp_ok $suggestor->cache_namespace, 'eq', 'SUGGEST-PREPOP',
       'Cache namespace';
     cmp_ok $suggestor->min_activity, '==', 5, 'Minimum activity';
-    cmp_ok $suggestor->top_count,    '==', 5, 'Default item count to return';
-    cmp_ok $suggestor->entries_limit, '==', 32768, 'Entries limit';
+    cmp_ok $suggestor->top_count,    '==', 7, 'Default item count to return';
+    cmp_ok $suggestor->entries_limit, '==', 131_072, 'Entries limit';
 
 };
 

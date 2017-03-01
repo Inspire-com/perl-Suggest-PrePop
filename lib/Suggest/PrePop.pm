@@ -60,13 +60,13 @@ has min_activity => (
 has entries_limit => (
     is      => 'ro',
     isa     => 'Int',
-    default => 32768,
+    default => 131072,
 );
 
 has top_count => (
     is      => 'ro',
     isa     => 'Int',
-    default => 5,
+    default => 7,
 );
 
 # Convenience
